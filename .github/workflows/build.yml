@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/pbs-arm64
+  IMAGE: ghcr.io/dasunnimantha/pbs-arm64 # image names must be lowercase
   DEBIAN_IMAGE: debian:trixie-20261020-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 
 jobs:
