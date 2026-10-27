@@ -23,11 +23,14 @@ apt_setup() {
   "$ROOT/scripts/proxmox-apt.sh" devel
   apt-get update -q
   apt-get install -yq --no-install-recommends \
-    build-essential devscripts equivs git ca-certificates curl jq gpg
+    build-essential devscripts equivs git ca-certificates curl jq gpg \
+    rustc # only for /usr/share/rustc/architecture.mk, which the Makefiles include
   # the Rust toolchain comes from the build image (official rust:<version> image, see build.yml).
   # Debian's cargo/rustc still get installed as nominal build-deps (rules includes
   # /usr/share/rustc/architecture.mk), but cargo/rustc from PATH are the ones used.
+  test -f /usr/share/rustc/architecture.mk
   command -v cargo | grep -q '^/usr/local/cargo/' || { echo "build: expected the rustup toolchain first on PATH" >&2; exit 1; }
+  command -v rustc | grep -q '^/usr/local/cargo/' || { echo "build: expected rustup rustc first on PATH" >&2; exit 1; }
   rustc --version
   cargo --version
 }
