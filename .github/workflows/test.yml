@@ -1,0 +1,61 @@
+name: test
+
+# Test a *published* image end to end: verify its signature, then run the integration suite
+# against it. Runs after every successful build, weekly, and on demand.
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to test (e.g. 4.2.8, 4.2.8-9, latest)
+        default: latest
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/dasunnimantha/pbs-arm64
+
+jobs:
+  integration:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Resolve image
+        id: img
+        env:
+          TAG: ${{ inputs.tag || 'latest' }}
+        run: |
+          docker pull "$IMAGE:$TAG"
+          digest=$(docker inspect -f '{{ index .RepoDigests 0 }}' "$IMAGE:$TAG")
+          version=$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE:$TAG")
+          echo "ref=$digest" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Testing \`$IMAGE:$TAG\` = \`$digest\` (PBS $version)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify signature (built by build.yml on main of this repo)
+        run: |
+          cosign verify "${{ steps.img.outputs.ref }}" \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/build\.yml@refs/heads/main$" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+          echo "✅ cosign signature verified" >> "$GITHUB_STEP_SUMMARY"
+      - name: Fetch the matching static client from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: ${{ steps.img.outputs.version }}
+        run: |
+          tag=$(gh release list --json tagName --jq "[.[] | select(.tagName | startswith(\"v$V-\"))][0].tagName")
+          gh release download "$tag" --pattern 'proxmox-backup-client-static_*_arm64.deb' --dir static
+          ls static
+      - name: Integration tests
+        run: tests/integration.sh "${{ steps.img.outputs.ref }}" static/proxmox-backup-client-static_*_arm64.deb

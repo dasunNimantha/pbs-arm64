@@ -62,6 +62,26 @@ cosign verify ghcr.io/dasunnimantha/pbs-arm64:4.2.8 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+## Testing
+
+`tests/integration.sh <image>` starts the server and runs end-to-end checks:
+- startup and security: no default login, the proxy runs unprivileged, the internal API is not exposed
+- the web UI and all its assets
+- the REST API with tickets and API tokens
+- datastores
+- file and block backups with byte-identical restores
+- deduplication
+- client-side encryption, including that restores without the key or with the wrong key fail
+- namespaces
+- verify, prune and garbage collection
+- a TLS sync/pull between datastores
+- the static client
+- persistence across restarts
+- the built-in benchmark
+
+The suite runs in `build.yml` before anything is published. `test.yml` re-runs it against the
+published, signature-verified image after each build, weekly, and on demand.
+
 ## Credits
 
 The approach of building PBS outside Proxmox's Debian Rust infrastructure was pioneered by

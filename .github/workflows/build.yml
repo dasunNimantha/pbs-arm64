@@ -3,9 +3,9 @@ name: build
 on:
   push:
     branches: [main]
-    paths: [versions.env, locks/**, scripts/**, docker/**, Dockerfile, .github/workflows/build.yml]
+    paths: [versions.env, locks/**, scripts/**, docker/**, tests/**, Dockerfile, .github/workflows/build.yml]
   pull_request:
-    paths: [versions.env, locks/**, scripts/**, docker/**, Dockerfile, .github/workflows/build.yml]
+    paths: [versions.env, locks/**, scripts/**, docker/**, tests/**, Dockerfile, .github/workflows/build.yml]
   workflow_dispatch:
 
 permissions:
@@ -97,17 +97,8 @@ jobs:
           build-args: |
             PBS_VERSION=${{ needs.debs.outputs.version }}
             DEBIAN_IMAGE=${{ env.DEBIAN_IMAGE }}
-      - name: Smoke test
-        run: |
-          printf 'smoke-test-password\n' > /tmp/pw
-          docker run -d --name pbs --tmpfs /run -v /tmp/pw:/run/secrets/pbs_admin_password:ro -p 8007:8007 pbs-arm64:test
-          for i in $(seq 60); do curl -ksf https://localhost:8007/ >/dev/null && break; sleep 2; done
-          docker logs pbs
-          curl -ksf https://localhost:8007/ >/dev/null
-          ticket=$(curl -ksf -d 'username=admin@pbs' -d 'password=smoke-test-password' https://localhost:8007/api2/json/access/ticket)
-          echo "$ticket" | grep -q '"ticket"'
-          docker exec pbs proxmox-backup-manager versions
-          docker exec pbs proxmox-backup-client benchmark --output-format json-pretty || true
+      - name: Integration tests (gate before publishing)
+        run: tests/integration.sh pbs-arm64:test debs/proxmox-backup-client-static_*_arm64.deb
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
