@@ -27,7 +27,8 @@ apt_setup() {
     rustc `# only for /usr/share/rustc/architecture.mk, which the Makefiles include` \
     `# C libraries the dropped librust-*-dev packages used to pull in (the crates' -sys deps)` \
     pkg-config libssl-dev libzstd-dev libudev-dev libpam0g-dev nettle-dev libbz2-dev \
-    libapt-pkg-dev libclang-dev zlib1g-dev
+    libapt-pkg-dev libclang-dev zlib1g-dev \
+    python3-sphinx `# www/OnlineHelpInfo.js is generated with sphinx even under the nodoc profile`
   # the Rust toolchain comes from the build image (official rust:<version> image, see build.yml).
   # Debian's cargo/rustc still get installed as nominal build-deps (rules includes
   # /usr/share/rustc/architecture.mk), but cargo/rustc from PATH are the ones used.
