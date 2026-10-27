@@ -157,7 +157,8 @@ t "restored files identical (content, modes, symlinks, empty dir)" same_tree "$W
 SNAP_IMG=$(latest_snap vm ci-disk 2>/dev/null)
 t "restore img archive" client restore "$SNAP_IMG" disk.img /restore/disk.raw
 t "restored disk image identical" cmp "$WORK/img/disk.raw" "$WORK/restore/disk.raw"
-catalog_has() { client catalog dump "$1" | has "$2"; }
+# catalog dump prints the listing on stderr
+catalog_has() { client catalog dump "$1" 2>&1 | has "$2"; }
 t "catalog lists backed-up files" catalog_has "$SNAP" hello.txt
 
 log "Deduplication"
