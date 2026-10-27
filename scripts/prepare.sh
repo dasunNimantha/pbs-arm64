@@ -112,7 +112,8 @@ for crate in proxmox-backup pve-xtermjs/termproxy; do
     (cd "$crate" && cargo fetch --locked)
     echo "prepare: $name: using committed lockfile"
   else
-    (cd "$crate" && cargo generate-lockfile)
+    # only choose crate versions that build with this rustc (Debian trixie's), as the package build will
+    (cd "$crate" && CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo generate-lockfile)
     mkdir -p "$ROOT/locks/$PBS_VERSION"
     cp "$crate/Cargo.lock" "$lock"
     echo "prepare: $name: generated new lockfile -> locks/$PBS_VERSION/$name.Cargo.lock"
