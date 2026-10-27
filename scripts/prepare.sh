@@ -72,19 +72,15 @@ debianize() { # package dir containing debian/
   sed -i -E '/^\s*proxmox-biome\b/d' "$d/debian/control"
   # keep cargo/rustc/dh-cargo but take whatever trixie ships
   sed -i -E 's/^(\s*)(cargo|rustc|dh-cargo)(:native)?\s*\([^)]*\)/\1\2\3/' "$d/debian/control"
-  # use plain cargo instead of Debian's offline-registry wrapper
-  edit "$d/debian/rules" 's|^(export )?CARGO=/usr/share/cargo/bin/cargo$|\1CARGO=/usr/bin/cargo|' \
-    '^(export )?CARGO=/usr/share/cargo/bin/cargo$' "use /usr/bin/cargo"
+  # use plain cargo (the toolchain on PATH) instead of Debian's offline-registry wrapper
+  edit "$d/debian/rules" 's|^(export )?CARGO=/usr/share/cargo/bin/cargo$|\1CARGO=cargo|' \
+    '^(export )?CARGO=/usr/share/cargo/bin/cargo$' "use cargo from PATH"
   edit "$d/debian/rules" '/\$\(CARGO\) prepare-debian /d' '\$\(CARGO\) prepare-debian ' "skip prepare-debian"
   # the config prepare-debian would have generated; rustflags line is extended by rules for static builds
   mkdir -p "$d/debian/cargo_home"
   cat > "$d/debian/cargo_home/config.toml" <<'EOF'
 [build]
 rustflags = ["-g"]
-
-[resolver]
-# pick crate versions that still build with Debian trixie's rustc
-incompatible-rust-versions = "fallback"
 
 [net]
 git-fetch-with-cli = true
@@ -112,8 +108,7 @@ for crate in proxmox-backup pve-xtermjs/termproxy; do
     (cd "$crate" && cargo fetch --locked)
     echo "prepare: $name: using committed lockfile"
   else
-    # only choose crate versions that build with this rustc (Debian trixie's), as the package build will
-    (cd "$crate" && CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo generate-lockfile)
+    (cd "$crate" && cargo generate-lockfile)
     mkdir -p "$ROOT/locks/$PBS_VERSION"
     cp "$crate/Cargo.lock" "$lock"
     echo "prepare: $name: generated new lockfile -> locks/$PBS_VERSION/$name.Cargo.lock"

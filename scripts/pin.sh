@@ -54,10 +54,17 @@ commit_for_version() {
 }
 
 shipped_version() {
-  curl -fsSL "$REPO_INDEX" | gunzip |
+  curl -fsSL "${REPO_INDEX}" | gunzip |
     awk -v p="$1" 'BEGIN{RS="";FS="\n"} {pk="";v=""; for(i=1;i<=NF;i++){if($i~/^Package: /)pk=substr($i,10); if($i~/^Version: /)v=substr($i,10)} if(pk==p) print v}' |
     sort -V | tail -1
 }
+
+# rustc version Proxmox builds with (their trixie backport), and the official Rust image for it
+DEVEL_INDEX=${PROXMOX_DEVEL_INDEX:-http://download.proxmox.com/debian/devel/dists/trixie/main/binary-amd64/Packages.gz}
+RUST_VERSION=$(REPO_INDEX=$DEVEL_INDEX shipped_version rustc | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+[[ "$RUST_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "could not determine Proxmox rustc version" >&2; exit 1; }
+RUST_DIGEST=$(curl -fsSL "https://hub.docker.com/v2/repositories/library/rust/tags/$RUST_VERSION-slim-trixie" |
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert "arm64" in [i["architecture"] for i in d["images"]]; print(d["digest"])')
 
 TERMPROXY_VERSION=$(shipped_version proxmox-termproxy)
 JOURNALREADER_VERSION=$(shipped_version proxmox-mini-journalreader)
@@ -74,6 +81,8 @@ PROXMOX_FUSE_COMMIT=$(commit_before proxmox-fuse)
 TERMPROXY_VERSION=$TERMPROXY_VERSION
 TERMPROXY_COMMIT=$(commit_for_version pve-xtermjs termproxy/debian/changelog proxmox-termproxy "$TERMPROXY_VERSION")
 JOURNALREADER_VERSION=$JOURNALREADER_VERSION
+RUST_VERSION=$RUST_VERSION
+RUST_IMAGE=rust:$RUST_VERSION-slim-trixie@$RUST_DIGEST
 JOURNALREADER_COMMIT=$(commit_for_version proxmox-mini-journalreader debian/changelog proxmox-mini-journalreader "$JOURNALREADER_VERSION")
 EOF
 cat "$OUT"

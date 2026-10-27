@@ -20,11 +20,24 @@ env:
   DEBIAN_IMAGE: debian:trixie-20261020-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 
 jobs:
+  pins:
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      rust_image: ${{ steps.p.outputs.rust_image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: p
+        run: echo "rust_image=$(sed -n 's/^RUST_IMAGE=//p' versions.env)" >> "$GITHUB_OUTPUT"
+
   debs:
+    needs: pins
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     container:
-      image: debian:trixie-20261020-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
+      # official Rust image (Debian trixie) at the rustc version Proxmox builds PBS with; pinned in versions.env
+      image: ${{ needs.pins.outputs.rust_image }}
     outputs:
       version: ${{ steps.v.outputs.version }}
       new_locks: ${{ steps.locks.outputs.new }}
