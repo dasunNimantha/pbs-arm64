@@ -55,8 +55,9 @@ s = sorted((x for x in json.load(sys.stdin) if x["backup-id"] == i), key=lambda 
 print(f"{t}/{i}/" + datetime.datetime.fromtimestamp(s[-1]["backup-time"], datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))' "$type" "$id"
 }
 snap_count() { snaps | python3 -c 'import json,sys; print(sum(1 for x in json.load(sys.stdin) if x["backup-id"]==sys.argv[1]))' "$1"; }
-same_tree() { diff <(tree_sig "$1") <(tree_sig "$2"); }
-proc_user() { sx sh -c 'for p in /proc/[0-9]*; do [ "$(cat $p/comm 2>/dev/null)" = "$1" ] && stat -c %U $p; done' _ "$1" | head -1; }
+same_tree() { [[ -d "$2" ]] && [[ -n "$(ls -A "$2")" ]] && diff <(tree_sig "$1") <(tree_sig "$2"); }
+# owner of the process whose executable is $1 (comm is truncated to 15 chars, so match the exe path)
+proc_user() { sx sh -c 'for p in /proc/[0-9]*; do case "$(readlink $p/exe 2>/dev/null)" in */"$1") stat -c %U $p; break;; esac; done' _ "$1"; }
 login() { curl -ksf -d username=admin@pbs --data-urlencode "password=$1" https://localhost:8007/api2/json/access/ticket | grep -q '"ticket"'; }
 wait_up() { for _ in $(seq 90); do curl -ksf https://localhost:8007/ >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 
@@ -101,7 +102,8 @@ for asset in /js/proxmox-backup-gui.js /css/ext6-pbs.css /widgettoolkit/proxmoxl
   t "UI asset $asset is served" curl -ksf -o /dev/null "https://localhost:8007$asset"
 done
 t "UI references every asset it loads (no 404s)" bash -c '
-  curl -ksf https://localhost:8007/ | grep -oE "(src|href)=\"/[^\"]+\"" | sed -E "s/^(src|href)=\"//; s/\"$//; s/\?.*$//" | sort -u |
+  # /pve2/images/logo-128.png: upstream index.hbs apple-touch-icon points at a PVE path (404 on official PBS too)
+  curl -ksf https://localhost:8007/ | grep -oE "(src|href)=\"/[^\"]+\"" | sed -E "s/^(src|href)=\"//; s/\"$//; s/\?.*$//" | sort -u | grep -vx /pve2/images/logo-128.png |
   while read -r p; do curl -ksf -o /dev/null "https://localhost:8007$p" || { echo "missing: $p"; exit 1; }; done'
 
 # ---------------------------------------------------------------- tokens & API
@@ -109,10 +111,17 @@ log "API"
 t "create datastore store1" mgr datastore create store1 /datastore/store1
 t "create datastore store2" mgr datastore create store2 /datastore/store2
 t "datastore has chunk store layout" sx test -d /datastore/store1/.chunks/0000
-TOKEN_JSON=$(mgr user generate-token admin@pbs ci --output-format json 2>/dev/null)
-TOKEN_ID=$(printf '%s' "$TOKEN_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tokenid"])' 2>/dev/null)
-TOKEN_SECRET=$(printf '%s' "$TOKEN_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])' 2>/dev/null)
-t "API token created" test -n "$TOKEN_SECRET"
+# create the API token through the REST API with a ticket + CSRF token, as the web UI does
+TICKET_JSON=$(curl -ksf -d username=admin@pbs --data-urlencode "password=$PW" https://localhost:8007/api2/json/access/ticket)
+TICKET=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["ticket"])' <<<"$TICKET_JSON" 2>/dev/null)
+CSRF=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["CSRFPreventionToken"])' <<<"$TICKET_JSON" 2>/dev/null)
+TOKEN_JSON=$(curl -ksf -X POST -b "PBSAuthCookie=$TICKET" -H "CSRFPreventionToken: $CSRF" \
+  https://localhost:8007/api2/json/access/users/admin@pbs/token/ci)
+TOKEN_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["tokenid"])' <<<"$TOKEN_JSON" 2>/dev/null)
+TOKEN_SECRET=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["value"])' <<<"$TOKEN_JSON" 2>/dev/null)
+t "API token created via REST (ticket + CSRF)" test -n "$TOKEN_SECRET" -a "$TOKEN_ID" = 'admin@pbs!ci'
+tf "write request without CSRF token is rejected" curl -ksf -X POST -b "PBSAuthCookie=$TICKET" \
+  https://localhost:8007/api2/json/access/users/admin@pbs/token/ci-nocsrf
 t "grant token DatastoreAdmin on /datastore" mgr acl update /datastore DatastoreAdmin --auth-id "$TOKEN_ID"
 t "grant token Audit on / (node status)" mgr acl update / Audit --auth-id "$TOKEN_ID"
 FP=$(mgr cert info 2>/dev/null | sed -n 's/^Fingerprint (sha256): //p')
@@ -151,6 +160,7 @@ t "catalog lists backed-up files" catalog_has "$SNAP" hello.txt
 log "Deduplication"
 chunks() { sx sh -c 'find /datastore/store1/.chunks -type f | wc -l'; }
 BEFORE=$(chunks)
+t "first backups created chunks ($BEFORE)" test "$BEFORE" -gt 10
 sleep 1
 t "unchanged second backup succeeds" client backup data.pxar:/src --backup-id ci-host
 AFTER=$(chunks)
