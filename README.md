@@ -21,8 +21,9 @@ Not affiliated with or supported by Proxmox Server Solutions GmbH.
 | Prepare (`scripts/prepare.sh`) | The upstream Debian packaging expects Proxmox's Debian-packaged Rust crates, which only exist for amd64. Instead, every Proxmox crate is resolved via Cargo's `[patch.crates-io]` to its pinned git revision, and the other crates come from crates.io as locked in `locks/<version>/*.Cargo.lock`. Each packaging edit is asserted, so the build fails instead of silently diverging if upstream changes. |
 | Build (`scripts/build.sh`) | Runs on a native arm64 GitHub runner in the official `rust:<version>-slim-trixie` image (pinned by digest), using the same rustc version Proxmox builds PBS with. The build is offline (`--locked`), uses the `nodoc` profile, and skips the x86-only JS linter (`BIOME=true`). |
 | Image (`Dockerfile`) | Our arch-specific `.deb`s plus the `Architecture: all` packages (web UI toolkit, ExtJS, i18n, docs, ACME plugins) unchanged from Proxmox's signed `pbs-no-subscription` repo. |
-| Publish | Image pushed to GHCR, signed with cosign (keyless), with SBOM and provenance attestations. The `.deb`s are attached to a GitHub release. |
-| Update (`upstream.yml`) | Daily check for a new `vX.Y.Z` tag of `proxmox-backup`. When there is one, it re-pins and builds automatically. The first build of a version generates and commits its lockfiles. |
+| Test | `build.yml` runs the full integration suite on the built image. **Nothing is published by a build.** |
+| Release (`release.yml`, manual) | Publishes a chosen green build: the exact tested OCI archive goes to GHCR (with its SBOM + provenance), is signed with cosign (keyless), the `.deb`s go to a GitHub release, and the version's lockfiles are committed. Nothing is rebuilt. |
+| Update (`upstream.yml`) | Daily check for a new `vX.Y.Z` tag of `proxmox-backup`. When there is one, it re-pins, builds and tests it, then opens a "ready to release" issue. |
 
 Packages built here: `proxmox-backup-server`, `proxmox-backup-client`, `proxmox-backup-client-static`,
 `proxmox-backup-file-restore`, `proxmox-termproxy`, `proxmox-mini-journalreader`.
@@ -58,7 +59,7 @@ Verify an image:
 
 ```
 cosign verify ghcr.io/dasunnimantha/pbs-arm64:4.2.8 \
-  --certificate-identity-regexp 'https://github.com/dasunNimantha/pbs-arm64/' \
+  --certificate-identity-regexp '^https://github.com/dasunNimantha/pbs-arm64/\.github/workflows/(release|build)\.yml@refs/heads/main$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -79,8 +80,12 @@ cosign verify ghcr.io/dasunnimantha/pbs-arm64:4.2.8 \
 - persistence across restarts
 - the built-in benchmark
 
-The suite runs in `build.yml` before anything is published. `test.yml` re-runs it against the
-published, signature-verified image after each build, weekly, and on demand.
+The suite runs in every `build.yml` run, and a build must pass it before it can be released.
+`test.yml` re-runs it against the published, signature-verified image after each release, when the
+tests change, weekly, and on demand.
+
+To publish a build: Actions → release → Run workflow (empty run id = latest green build), or
+`gh workflow run release.yml -f run_id=<build run id>`.
 
 ## Credits
 

@@ -1,6 +1,7 @@
 name: upstream
 
-# Daily: if Proxmox tagged a new proxmox-backup release, re-pin all sources and build it.
+# Daily: if Proxmox tagged a new proxmox-backup release, re-pin all sources, build and test it,
+# and open a ready-to-release issue. Publishing stays manual (release.yml).
 on:
   schedule:
     - cron: "17 3 * * *"
@@ -41,4 +42,4 @@ jobs:
           git commit -m "Update to Proxmox Backup Server ${{ steps.pin.outputs.version }}"
           git push
           # pushes made with GITHUB_TOKEN don't trigger workflows; start the build explicitly
-          gh workflow run build.yml --ref main
+          gh workflow run build.yml --ref main -f reason=upstream

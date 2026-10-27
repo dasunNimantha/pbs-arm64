@@ -56,9 +56,12 @@ print(f"{t}/{i}/" + datetime.datetime.fromtimestamp(s[-1]["backup-time"], dateti
 }
 snap_count() { snaps | python3 -c 'import json,sys; print(sum(1 for x in json.load(sys.stdin) if x["backup-id"]==sys.argv[1]))' "$1"; }
 same_tree() { [[ -d "$2" ]] && [[ -n "$(ls -A "$2")" ]] && diff <(tree_sig "$1") <(tree_sig "$2"); }
-# owner of the process whose executable is $1 (comm is truncated to 15 chars, so match the exe path)
-proc_user() { sx sh -c 'for p in /proc/[0-9]*; do case "$(readlink $p/exe 2>/dev/null)" in */"$1") stat -c %U $p; break;; esac; done' _ "$1"; }
-login() { curl -ksf -d username=admin@pbs --data-urlencode "password=$1" https://localhost:8007/api2/json/access/ticket | grep -q '"ticket"'; }
+# owner of the process running binary $1. comm is truncated to 15 chars and /proc/<pid>/exe of a
+# process that dropped privileges isn't readable without CAP_SYS_PTRACE, so match argv[0]
+proc_user() { sx sh -c 'for p in /proc/[0-9]*; do a=$(tr "\0" "\n" < $p/cmdline 2>/dev/null | head -1); case "$a" in */"$1") stat -c %U $p; break;; esac; done' _ "$1"; }
+# like grep -q, but reads all input: with pipefail, grep -q exiting early makes the writer fail (SIGPIPE)
+has() { grep -e "$1" >/dev/null; }
+login() { curl -ksf -d username=admin@pbs --data-urlencode "password=$1" https://localhost:8007/api2/json/access/ticket | has '"ticket"'; }
 wait_up() { for _ in $(seq 90); do curl -ksf https://localhost:8007/ >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 
 start_server() {
@@ -126,7 +129,7 @@ t "grant token DatastoreAdmin on /datastore" mgr acl update /datastore Datastore
 t "grant token Audit on / (node status)" mgr acl update / Audit --auth-id "$TOKEN_ID"
 FP=$(mgr cert info 2>/dev/null | sed -n 's/^Fingerprint (sha256): //p')
 t "server certificate fingerprint available" test -n "$FP"
-api_has() { api "$1" | grep -q "$2"; }
+api_has() { api "$1" | has "$2"; }
 t "API: version" api_has /version release
 t "API: node status" api_has /nodes/localhost/status cpuinfo
 both_stores() { local l; l=$(api /admin/datastore) && grep -q store1 <<<"$l" && grep -q store2 <<<"$l"; }
@@ -154,7 +157,7 @@ t "restored files identical (content, modes, symlinks, empty dir)" same_tree "$W
 SNAP_IMG=$(latest_snap vm ci-disk 2>/dev/null)
 t "restore img archive" client restore "$SNAP_IMG" disk.img /restore/disk.raw
 t "restored disk image identical" cmp "$WORK/img/disk.raw" "$WORK/restore/disk.raw"
-catalog_has() { client catalog dump "$1" | grep -q "$2"; }
+catalog_has() { client catalog dump "$1" | has "$2"; }
 t "catalog lists backed-up files" catalog_has "$SNAP" hello.txt
 
 log "Deduplication"
@@ -183,7 +186,7 @@ tf "restore with the wrong key fails" client restore "$SNAP_ENC" data.pxar /rest
 log "Namespaces"
 t "create namespace ci-ns" client namespace create ci-ns
 t "backup into namespace" client backup data.pxar:/src --backup-id ci-ns-host --ns ci-ns
-in_ns() { snaps ${1:+--ns "$1"} | grep -q ci-ns-host; }
+in_ns() { snaps ${1:+--ns "$1"} | has ci-ns-host; }
 t "namespace backup visible in namespace" in_ns ci-ns
 tf "namespace backup not in root namespace" in_ns ""
 
@@ -202,7 +205,7 @@ t "task list: all tasks OK" tasks_ok
 log "Sync job (pull from itself over TLS)"
 t "create remote pointing at itself" mgr remote create self --host localhost --auth-id "$TOKEN_ID" --password "$TOKEN_SECRET" --fingerprint "$FP"
 t "pull store1 -> store2" mgr pull self store1 store2
-synced_has() { REPO_STORE=store2 snaps | grep -q ci-disk; }
+synced_has() { REPO_STORE=store2 snaps | has ci-disk; }
 t "pulled snapshots present in store2" synced_has
 restore_synced() { REPO_STORE=store2 client restore "$SNAP_IMG" disk.img /restore/synced.raw && cmp "$WORK/img/disk.raw" "$WORK/restore/synced.raw"; }
 t "restore from synced copy identical" restore_synced

@@ -1,12 +1,14 @@
 name: test
 
 # Test a *published* image end to end: verify its signature, then run the integration suite
-# against it. Runs after every successful build, weekly, and on demand.
+# against it. Runs after every release, when the tests change, weekly, and on demand.
 on:
   workflow_run:
-    workflows: [build]
+    workflows: [release]
     types: [completed]
+  push:
     branches: [main]
+    paths: [tests/**, .github/workflows/test.yml]
   schedule:
     - cron: "41 4 * * 1"
   workflow_dispatch:
@@ -43,10 +45,11 @@ jobs:
           echo "ref=$digest" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Testing \`$IMAGE:$TAG\` = \`$digest\` (PBS $version)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Verify signature (built by build.yml on main of this repo)
+      - name: Verify signature (signed by this repo's workflows on main)
         run: |
+          # release.yml signs releases; the first 4.2.8 images were signed by build.yml
           cosign verify "${{ steps.img.outputs.ref }}" \
-            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/build\.yml@refs/heads/main$" \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/(release|build)\.yml@refs/heads/main$" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
           echo "✅ cosign signature verified" >> "$GITHUB_STEP_SUMMARY"
       - name: Fetch the matching static client from the release
