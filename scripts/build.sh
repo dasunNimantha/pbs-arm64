@@ -24,7 +24,10 @@ apt_setup() {
   apt-get update -q
   apt-get install -yq --no-install-recommends \
     build-essential devscripts equivs git ca-certificates curl jq gpg \
-    rustc # only for /usr/share/rustc/architecture.mk, which the Makefiles include
+    rustc `# only for /usr/share/rustc/architecture.mk, which the Makefiles include` \
+    `# C libraries the dropped librust-*-dev packages used to pull in (the crates' -sys deps)` \
+    pkg-config libssl-dev libzstd-dev libudev-dev libpam0g-dev nettle-dev libbz2-dev \
+    libapt-pkg-dev libclang-dev
   # the Rust toolchain comes from the build image (official rust:<version> image, see build.yml).
   # Debian's cargo/rustc still get installed as nominal build-deps (rules includes
   # /usr/share/rustc/architecture.mk), but cargo/rustc from PATH are the ones used.
