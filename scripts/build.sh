@@ -23,7 +23,7 @@ apt_setup() {
   "$ROOT/scripts/proxmox-apt.sh" devel
   apt-get update -q
   apt-get install -yq --no-install-recommends \
-    build-essential devscripts equivs git ca-certificates curl \
+    build-essential devscripts equivs git ca-certificates curl jq \
     cargo rustc libstd-rust-dev
   rustc --version
   cargo --version
@@ -53,6 +53,10 @@ cd "$WORK"
 
 # --- proxmox-backup (server, client, static client, file-restore)
 make -C proxmox-backup build
+# the Makefile copies workspace members found via `cargo metadata | jq`; make sure none were missed
+for m in pbs-buildcfg pbs-client pbs-config pbs-datastore pbs-tools; do
+  [[ -f proxmox-backup/build/$m/Cargo.toml ]] || { echo "build: workspace member $m missing from build dir" >&2; exit 1; }
+done
 build_deps proxmox-backup/build nodoc
 lock_and_fetch proxmox-backup/build proxmox-backup
 dpkg_build proxmox-backup/build --no-pre-clean --build-profiles=nodoc
