@@ -12,6 +12,7 @@ LABEL org.opencontainers.image.title="Proxmox Backup Server (arm64 build)" \
       org.opencontainers.image.source="https://github.com/dasunNimantha/pbs-arm64"
 
 COPY scripts/proxmox-apt.sh /usr/local/sbin/
+COPY docker/no-subscription-nag.sh /usr/local/sbin/
 COPY debs/ /tmp/debs/
 
 # policy-rc.d: package scripts must not try to start services (there is no systemd here)
@@ -26,6 +27,7 @@ RUN set -eux; \
       /tmp/debs/proxmox-mini-journalreader_*.deb; \
     test "$(dpkg-query -W -f='${Version}' proxmox-backup-server | cut -d- -f1)" = "${PBS_VERSION}"; \
     test "$(dpkg-query -W -f='${Architecture}' proxmox-backup-server)" = "$(dpkg --print-architecture)"; \
+    /usr/local/sbin/no-subscription-nag.sh; \
     rm -rf /tmp/debs /var/lib/apt/lists/* /var/cache/apt/*
 
 COPY docker/entrypoint.sh /usr/local/sbin/pbs-entrypoint

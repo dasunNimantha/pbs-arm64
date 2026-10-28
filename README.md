@@ -52,6 +52,9 @@ There is no default password. On first start, `admin@pbs` is created from the se
 datastore at `/datastore` in the UI (`https://<host>:8007`) or with
 `proxmox-backup-manager datastore create`.
 
+The "No valid subscription" popup is removed (`docker/no-subscription-nag.sh`, a one-line patch to
+the UI toolkit applied at image build). The build fails if upstream changes that code.
+
 Limitations of running in a container: no ZFS, no PAM users (use `@pbs` users), and the web
 shell is unavailable.
 

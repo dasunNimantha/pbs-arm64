@@ -104,6 +104,8 @@ for asset in /js/proxmox-backup-gui.js /css/ext6-pbs.css /widgettoolkit/proxmoxl
   /fontawesome/css/font-awesome.css /qrcodejs/qrcode.min.js /xtermjs/xterm.js; do
   t "UI asset $asset is served" curl -ksf -o /dev/null "https://localhost:8007$asset"
 done
+nag_removed() { curl -ksf https://localhost:8007/widgettoolkit/proxmoxlib.js | has 'pbs-arm64: subscription nag disabled'; }
+t "subscription nag removed from the served UI toolkit" nag_removed
 t "UI references every asset it loads (no 404s)" bash -c '
   # /pve2/images/logo-128.png: upstream index.hbs apple-touch-icon points at a PVE path (404 on official PBS too)
   curl -ksf https://localhost:8007/ | grep -oE "(src|href)=\"/[^\"]+\"" | sed -E "s/^(src|href)=\"//; s/\"$//; s/\?.*$//" | sort -u | grep -vx /pve2/images/logo-128.png |
