@@ -1,14 +1,12 @@
 name: test
 
 # Test a *published* image end to end: verify its signature, then run the integration suite
-# against it. Runs after every release, when the tests change, weekly, and on demand.
+# against it. Runs after every release, weekly, and on demand. (Every build, including test-only
+# changes, is tested in build.yml against a temporary image built from that commit.)
 on:
   workflow_run:
     workflows: [release]
     types: [completed]
-  push:
-    branches: [main]
-    paths: [tests/**, .github/workflows/test.yml]
   schedule:
     - cron: "41 4 * * 1"
   workflow_dispatch:

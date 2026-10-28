@@ -83,9 +83,9 @@ cosign verify ghcr.io/dasunnimantha/pbs-arm64:4.2.8 \
 - persistence across restarts
 - the built-in benchmark
 
-The suite runs in every `build.yml` run, and a build must pass it before it can be released.
-`test.yml` re-runs it against the published, signature-verified image after each release, when the
-tests change, weekly, and on demand.
+Every `build.yml` run (any change to the build, image or tests) builds a temporary image and runs
+the suite against it; a build must pass before it can be released. `test.yml` re-runs the suite
+against the published, signature-verified image after each release, weekly, and on demand.
 
 To publish a build: Actions → release → Run workflow (empty run id = latest green build), or
 `gh workflow run release.yml -f run_id=<build run id>`.

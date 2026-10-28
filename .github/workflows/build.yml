@@ -3,7 +3,7 @@ name: build
 on:
   push:
     branches: [main]
-    paths: [versions.env, locks/**, scripts/**, docker/**, Dockerfile, .github/workflows/build.yml]
+    paths: [versions.env, locks/**, scripts/**, docker/**, tests/**, Dockerfile, .github/workflows/build.yml]
   pull_request:
     paths: [versions.env, locks/**, scripts/**, docker/**, tests/**, Dockerfile, .github/workflows/build.yml]
   workflow_dispatch:
